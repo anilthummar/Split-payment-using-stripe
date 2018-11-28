@@ -1,0 +1,217 @@
+
+
+import android.app.ProgressDialog;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.AppCompatButton;
+import android.util.Log;
+import android.view.View;
+import android.widget.ProgressBar;
+import android.widget.Toast;
+
+import com.stripe.android.Stripe;
+import com.stripe.android.TokenCallback;
+import com.stripe.android.model.Card;
+import com.stripe.android.model.Token;
+import com.stripe.android.view.CardMultilineWidget;
+import com.stripe.model.Charge;
+import com.stripe.model.Payout;
+import com.stripe.net.RequestOptions;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class MainActivity extends AppCompatActivity
+{
+    AppCompatButton submit;
+    CardMultilineWidget card_multiline_widget;
+    Token token_test;
+    ProgressDialog pd;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState)
+    {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        submit = findViewById(R.id.submit);
+        card_multiline_widget = findViewById(R.id.card_multiline_widget);
+
+        submit.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public void onClick(View v)
+            {
+                Card cardToSave = card_multiline_widget.getCard();//4242424242424242 for testing
+                if (cardToSave == null)
+                {
+                    Toast.makeText(getApplicationContext(),"Invalid Card Data",Toast.LENGTH_LONG).show();
+                }
+                else
+                {
+                    new GenerateToken().execute();
+                }
+            }
+        });
+    }
+
+    public void getCardDetails()
+    {
+        try
+        {
+            Card cardToSave = card_multiline_widget.getCard();//4242424242424242 for testing
+            if (cardToSave != null)
+            {
+                Stripe stripe = new Stripe(getApplicationContext(), "pk_test_XwdYIsafsdfsdfsfwee3Xfdfrdvf");
+                stripe.createToken(cardToSave, new TokenCallback()
+                {
+                    public void onSuccess(Token token)
+                    {
+                        try
+                        {
+                            token_test = token;
+                            // Send token to your server
+                            Log.e("TokenID",token.getId());
+                            Log.e("TokenType",token.getType());
+//                        Log.e("Holder",token.getBankAccount().getAccountHolderName());
+                            Log.e("Country",token.getCard().getCountry());
+
+                            new ChargeExecute().execute();
+                        }
+                        catch (Exception e)
+                        {
+                            e.printStackTrace();
+                        }
+                    }
+                    public void onError(Exception error)
+                    {
+                        // Show localized error message
+                        Toast.makeText(getApplicationContext(), error.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }
+        catch (Exception e)
+        {
+            pd.dismiss();
+            e.printStackTrace();
+        }
+    }
+
+    private class GenerateToken extends AsyncTask<Void,Void,Void>
+    {
+        @Override
+        protected void onPreExecute()
+        {
+            super.onPreExecute();
+
+            pd = new ProgressDialog(MainActivity.this);
+            pd.setMessage("Process Runnning...");
+            pd.setCancelable(false);
+            pd.show();
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids)
+        {
+            getCardDetails();
+
+            return null;
+        }
+    }
+
+    private class ChargeExecute extends AsyncTask<Void,Void,Void>
+    {
+        String msg = "";
+
+        @Override
+        protected void onPreExecute()
+        {
+            super.onPreExecute();
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids)
+        {
+            try
+            {
+                /*Transfer in main account*/
+                com.stripe.Stripe.apiKey = "sk_test_ssgertggdfv35g43ergdfgd";
+
+
+                Map<String, Object> params = new HashMap<>();
+                params.put("amount", 50);//50 = 0.50
+                params.put("currency", "usd");
+                params.put("description", "Example charge");
+                params.put("source", token_test.getId());
+                Charge charge = Charge.create(params);
+                Log.e("Charge",charge+"");
+                msg = charge+"";
+                //Below method transfer payment to other accounts split payment
+                // but work when you have live account details submit
+//                createCustomAccount();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+                pd.dismiss();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid)
+        {
+            super.onPostExecute(aVoid);
+
+            pd.dismiss();
+
+            Toast.makeText(getApplicationContext(),msg,Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public void createCustomAccount()
+    {
+        try
+        {
+            com.stripe.Stripe.apiKey = "sk_test_ssgertggdfv35g43ergdfgd";
+
+            /*Account Connect*/
+            /*Map<String, Object> accountParams = new HashMap<String, Object>();
+            accountParams.put("type", "custom");
+            accountParams.put("country", "US");
+
+            Map<String, Object> externalAccountParams = new HashMap<>();
+            externalAccountParams.put("object", "bank_account");
+            externalAccountParams.put("country", "US");
+            externalAccountParams.put("currency", "usd");
+            externalAccountParams.put("routing_number", "110000000");
+            externalAccountParams.put("account_number", "000123456789");
+            accountParams.put("external_account", externalAccountParams);
+
+            Map<String, Object> tosParams = new HashMap<>();
+            tosParams.put("date", 1524826068);
+            tosParams.put("ip", "122.169.11.127");
+            accountParams.put("tos_acceptance", tosParams);
+
+            Account acct = Account.create(accountParams);
+
+            Log.e("AccountID",acct.getId());*/
+
+
+
+            /*Transfer to Connected Account*/
+            RequestOptions requestOptions = RequestOptions.builder().setStripeAccount(acct.getId()).build();
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("amount", 5 * 100);// amt 
+            params.put("currency", "usd");
+            Payout.create(params, requestOptions);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
+}
